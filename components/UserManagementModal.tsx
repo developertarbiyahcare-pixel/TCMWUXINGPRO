@@ -177,9 +177,22 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
     setGeminiKeys(newKeys);
   };
 
-  const resetAllKeys = () => {
+  const resetAllKeys = async () => {
     const newKeys = geminiKeys.map(k => ({ ...k, isExhausted: false }));
     setGeminiKeys(newKeys);
+    
+    // Also save to DB immediately for convenience
+    const result = await db.settings.update({
+      ...settings,
+      geminiApiKeys: newKeys
+    });
+    
+    if (result.success) {
+      setSuccessMsg("Semua API Key telah di-reset dan disimpan.");
+      setTimeout(() => window.location.reload(), 1500);
+    } else {
+      setError("Gagal menyimpan reset: " + result.error);
+    }
   };
 
   const handleChangeOwnPassword = async (e: React.FormEvent) => {

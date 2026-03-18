@@ -84,6 +84,15 @@ const App: React.FC = () => {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
+  const handleResetKeys = async () => {
+    if (!settings) return;
+    const newKeys = (settings.geminiApiKeys || []).map(k => ({ ...k, isExhausted: false }));
+    const newSettings = { ...settings, geminiApiKeys: newKeys };
+    setSettings(newSettings);
+    await db.settings.update(newSettings);
+    window.location.reload();
+  };
+
   // Persist user session to localStorage
   useEffect(() => {
     if (currentUser) {
@@ -444,19 +453,39 @@ const App: React.FC = () => {
           {activePanel === 'chat' && (
             <div className="max-w-4xl mx-auto space-y-6 pb-20">
               {/* API Key Warning */}
-              {settings && !(settings.geminiApiKeys || []).some(k => !k.isExhausted && k.key.trim() !== "") && !process.env.GEMINI_API_KEY && (
-                <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-center gap-4 animate-pulse shadow-sm">
-                  <div className="bg-rose-100 p-2 rounded-xl">
-                    <AlertCircle className="w-5 h-5 text-rose-600" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-black text-rose-900 uppercase tracking-tight">API Key Belum Dikonfigurasi</p>
-                    <p className="text-[10px] font-bold text-rose-500 uppercase tracking-widest leading-relaxed">
-                      Sistem tidak menemukan API Key Gemini yang aktif. Silakan tambahkan kunci di Master Control {'>'} System Settings.
-                    </p>
-                  </div>
-                </div>
-              )}
+              {(() => {
+                const hasActiveKey = settings && (settings.geminiApiKeys || []).some(k => !k.isExhausted && k.key.trim() !== "");
+                const hasKeysButExhausted = settings && (settings.geminiApiKeys || []).length > 0 && !(settings.geminiApiKeys || []).some(k => !k.isExhausted);
+                
+                if (settings && !hasActiveKey && !process.env.GEMINI_API_KEY) {
+                  return (
+                    <div className={`border p-4 rounded-2xl flex items-center gap-4 shadow-sm animate-fade-in ${hasKeysButExhausted ? 'bg-amber-50 border-amber-100' : 'bg-rose-50 border-rose-100'}`}>
+                      <div className={`p-2 rounded-xl ${hasKeysButExhausted ? 'bg-amber-100' : 'bg-rose-100'}`}>
+                        <AlertCircle className={`w-5 h-5 ${hasKeysButExhausted ? 'text-amber-600' : 'text-rose-600'}`} />
+                      </div>
+                      <div className="flex-1">
+                        <p className={`text-xs font-black uppercase tracking-tight ${hasKeysButExhausted ? 'text-amber-900' : 'text-rose-900'}`}>
+                          {hasKeysButExhausted ? 'Semua API Key Terpakai (Exhausted)' : 'API Key Belum Dikonfigurasi'}
+                        </p>
+                        <p className={`text-[10px] font-bold uppercase tracking-widest leading-relaxed ${hasKeysButExhausted ? 'text-amber-500' : 'text-rose-500'}`}>
+                          {hasKeysButExhausted 
+                            ? 'Batas kuota harian tercapai. Silakan reset status kunci untuk mencoba lagi.' 
+                            : 'Sistem tidak menemukan API Key Gemini yang aktif. Silakan tambahkan kunci di Master Control > System Settings.'}
+                        </p>
+                      </div>
+                      {hasKeysButExhausted && (
+                        <button 
+                          onClick={handleResetKeys}
+                          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md shadow-amber-200 active:scale-95"
+                        >
+                          Reset Kunci
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               
               {messages.map(msg => (
                 <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
