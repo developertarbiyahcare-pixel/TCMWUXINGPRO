@@ -18,7 +18,14 @@ export async function analyzeTongueImage(
     }
   }
 
-  if (availableKeys.length === 0) throw new Error("No active Gemini API keys found.");
+  if (availableKeys.length === 0) {
+    const hasKeys = (apiKeys || []).length > 0;
+    if (hasKeys) {
+      throw new Error("Semua API Key Gemini Anda telah mencapai batas kuota (Exhausted). Silakan reset status kunci di menu Settings atau tambahkan kunci baru.");
+    } else {
+      throw new Error("Tidak ada API Key Gemini yang ditemukan. Silakan tambahkan API Key di menu Settings untuk memulai analisis lidah.");
+    }
+  }
 
   const [mimeTypePrefix, base64Data] = base64Image.split(';base64,');
   const mimeType = mimeTypePrefix ? mimeTypePrefix.split(':')[1] : "image/jpeg";

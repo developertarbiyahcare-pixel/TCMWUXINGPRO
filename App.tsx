@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, Component, ErrorInfo, ReactNode } from 'react';
-import { Send, Activity, MessageSquare, Stethoscope, Archive, Compass, GraduationCap, Shield, LogOut, ClipboardList, Loader2, Menu, X, Globe, User, LayoutGrid, Scale, Paperclip, Image as ImageIcon, Zap, ChevronDown, ChevronRight } from 'lucide-react';
+import { Send, Activity, MessageSquare, Stethoscope, Archive, Compass, GraduationCap, Shield, LogOut, ClipboardList, Loader2, Menu, X, Globe, User, LayoutGrid, Scale, Paperclip, Image as ImageIcon, Zap, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import { Language, ChatMessage, ScoredSyndrome, UserAccount, TcmDiagnosisResult, AppSettings } from './types';
 import { sendMessageToGeminiStream } from './services/geminiService';
 import { analyzePatient } from './services/tcmLogic';
@@ -96,7 +96,17 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadSettings = async () => {
       const s = await db.settings.get();
-      if (s) setSettings(s);
+      if (s) {
+        setSettings(s);
+      } else {
+        setSettings({
+          geminiApiKey: '',
+          geminiApiKeys: [],
+          clinicName: 'TCM Clinic',
+          clinicAddress: '',
+          clinicPhone: ''
+        });
+      }
     };
     loadSettings();
   }, []);
@@ -433,6 +443,21 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-hide bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,0.05),transparent)] pb-20 md:pb-8">
           {activePanel === 'chat' && (
             <div className="max-w-4xl mx-auto space-y-6 pb-20">
+              {/* API Key Warning */}
+              {settings && !(settings.geminiApiKeys || []).some(k => !k.isExhausted && k.key.trim() !== "") && !process.env.GEMINI_API_KEY && (
+                <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-center gap-4 animate-pulse shadow-sm">
+                  <div className="bg-rose-100 p-2 rounded-xl">
+                    <AlertCircle className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-black text-rose-900 uppercase tracking-tight">API Key Belum Dikonfigurasi</p>
+                    <p className="text-[10px] font-bold text-rose-500 uppercase tracking-widest leading-relaxed">
+                      Sistem tidak menemukan API Key Gemini yang aktif. Silakan tambahkan kunci di Master Control {'>'} System Settings.
+                    </p>
+                  </div>
+                </div>
+              )}
+              
               {messages.map(msg => (
                 <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
                   <div className="max-w-[95%] md:max-w-[85%]">

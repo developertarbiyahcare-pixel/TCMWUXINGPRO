@@ -62,7 +62,14 @@ export const sendMessageToGeminiStream = async (
     }
   }
 
-  if (availableKeys.length === 0) throw new Error("No active Gemini API keys found.");
+  if (availableKeys.length === 0) {
+    const hasKeys = (apiKeys || []).length > 0;
+    if (hasKeys) {
+      throw new Error("Semua API Key Gemini Anda telah mencapai batas kuota (Exhausted). Silakan reset status kunci di menu Settings atau tambahkan kunci baru.");
+    } else {
+      throw new Error("Tidak ada API Key Gemini yang ditemukan. Silakan tambahkan API Key di menu Settings untuk memulai diagnosis.");
+    }
+  }
 
   let lastError: any = null;
 
