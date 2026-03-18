@@ -136,11 +136,11 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
       clinicAddress,
       clinicPhone
     });
-    if (result) {
+    if (result.success) {
       setSuccessMsg("Settings saved successfully.");
       setTimeout(() => window.location.reload(), 1000); // Reload to apply new API key and settings
     } else {
-      setError("Failed to save settings.");
+      setError(result.error || "Failed to save settings.");
     }
   };
 
@@ -166,6 +166,11 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
   const toggleKeyExhausted = (index: number) => {
     const newKeys = [...geminiKeys];
     newKeys[index].isExhausted = !newKeys[index].isExhausted;
+    setGeminiKeys(newKeys);
+  };
+
+  const resetAllKeys = () => {
+    const newKeys = geminiKeys.map(k => ({ ...k, isExhausted: false }));
     setGeminiKeys(newKeys);
   };
 
@@ -424,12 +429,22 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
                   <div className="space-y-3">
                     <div className="flex justify-between items-center mb-2">
                       <label className="text-xs font-bold text-purple-400 uppercase tracking-widest ml-1">Gemini API Keys (Max 10)</label>
-                      <button 
-                        onClick={addKeyField}
-                        className="text-[10px] font-black text-white bg-purple-600 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-purple-700 transition-all shadow-sm"
-                      >
-                        + Add Key
-                      </button>
+                      <div className="flex gap-2">
+                        {geminiKeys.some(k => k.isExhausted) && (
+                          <button 
+                            onClick={resetAllKeys}
+                            className="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-emerald-100 transition-all shadow-sm"
+                          >
+                            Reset All
+                          </button>
+                        )}
+                        <button 
+                          onClick={addKeyField}
+                          className="text-[10px] font-black text-white bg-purple-600 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-purple-700 transition-all shadow-sm"
+                        >
+                          + Add Key
+                        </button>
+                      </div>
                     </div>
                     
                     {geminiKeys.length === 0 && (

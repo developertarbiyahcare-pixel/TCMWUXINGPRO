@@ -13,27 +13,54 @@ export const DEFAULT_ADMIN: UserAccount = {
 export const db = {
   settings: {
     get: async (): Promise<AppSettings | null> => {
-      if (!isSupabaseConfigured()) return null;
+      // Try local first for speed, then sync with Supabase
+      const local = localStorage.getItem('tcm_app_settings');
+      const localData = local ? JSON.parse(local) : null;
+
+      if (!isSupabaseConfigured()) return localData;
+
       try {
         const supabase = getSupabase();
         const { data, error } = await supabase.from('settings').select('*').single();
-        if (error) throw error;
+        if (error) {
+          if (error.code === 'PGRST116') return localData; // No rows found
+          throw error;
+        }
+        // Sync local with remote
+        if (data) localStorage.setItem('tcm_app_settings', JSON.stringify(data));
         return data;
       } catch (e) {
         console.error('Supabase Error (settings.get):', e);
-        return null;
+        return localData;
       }
     },
-    update: async (settings: AppSettings): Promise<boolean> => {
-      if (!isSupabaseConfigured()) return false;
+    update: async (settings: AppSettings): Promise<{ success: boolean; error?: string }> => {
+      // Always save to local
+      localStorage.setItem('tcm_app_settings', JSON.stringify(settings));
+      
+      if (!isSupabaseConfigured()) return { success: true };
+      
       try {
         const supabase = getSupabase();
-        const { error } = await supabase.from('settings').upsert({ id: 1, ...settings });
+        // Ensure we only send valid columns to Supabase
+        // If the table is missing columns, this might still fail, but we catch it
+        const { error } = await supabase.from('settings').upsert({ 
+          id: 1, 
+          geminiApiKey: settings.geminiApiKey,
+          geminiApiKeys: settings.geminiApiKeys,
+          clinicName: settings.clinicName,
+          clinicAddress: settings.clinicAddress,
+          clinicPhone: settings.clinicPhone
+        });
+        
         if (error) throw error;
-        return true;
-      } catch (e) {
+        return { success: true };
+      } catch (e: any) {
         console.error('Supabase Error (settings.update):', e);
-        return false;
+        return { 
+          success: false, 
+          error: `Database Error: ${e.message || 'Unknown error'}. Please ensure your Supabase "settings" table has a "geminiApiKeys" column (JSONB).` 
+        };
       }
     }
   },

@@ -214,20 +214,21 @@ const App: React.FC = () => {
         appLanguage, 
         false, 
         analysis || cdssResults,
-        settings?.geminiApiKeys
+        settings?.geminiApiKeys,
+        undefined, // onChunk
+        async (exhaustedKey) => {
+          if (settings) {
+            const updatedKeys = settings.geminiApiKeys.map(k => 
+              k.key === exhaustedKey ? { ...k, isExhausted: true } : k
+            );
+            const newSettings = { ...settings, geminiApiKeys: updatedKeys };
+            setSettings(newSettings);
+            await db.settings.update(newSettings);
+          }
+        }
       );
       
       const response = result.data;
-
-      // Update settings if keys were exhausted
-      if (result.exhaustedKeys.length > 0 && settings) {
-        const updatedKeys = settings.geminiApiKeys.map(k => 
-          result.exhaustedKeys.includes(k.key) ? { ...k, isExhausted: true } : k
-        );
-        const newSettings = { ...settings, geminiApiKeys: updatedKeys };
-        setSettings(newSettings);
-        db.settings.update(newSettings);
-      }
       
       setMessages(prev => prev.map(m => m.id === botMsgId ? { 
         ...m, 

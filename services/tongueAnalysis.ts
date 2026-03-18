@@ -4,9 +4,12 @@
 import { GoogleGenAI } from "@google/genai";
 import { ApiKeyEntry } from '../types';
 
-export async function analyzeTongueImage(base64Image: string, apiKeys?: ApiKeyEntry[]): Promise<{ text: string, exhaustedKeys: string[] }> {
+export async function analyzeTongueImage(
+  base64Image: string, 
+  apiKeys?: ApiKeyEntry[],
+  onKeyExhausted?: (key: string) => void
+): Promise<{ text: string }> {
   const availableKeys = (apiKeys || []).filter(k => !k.isExhausted && k.key.trim() !== "");
-  const exhaustedIndices: number[] = [];
   
   if (availableKeys.length === 0) {
     const envKey = process.env.GEMINI_API_KEY;
@@ -58,14 +61,14 @@ export async function analyzeTongueImage(base64Image: string, apiKeys?: ApiKeyEn
       });
 
       return {
-        text: response.text || "Maaf, tidak dapat menganalisis gambar ini.",
-        exhaustedKeys: exhaustedIndices.map(idx => availableKeys[idx].key)
+        text: response.text || "Maaf, tidak dapat menganalisis gambar ini."
       };
     } catch (error: any) {
       console.error(`Tongue Analysis Error with key ${apiKey.substring(0, 8)}...:`, error);
       lastError = error;
-      if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("403")) {
-        exhaustedIndices.push(i);
+      const errMsg = error.message?.toLowerCase() || "";
+      if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("403") || errMsg.includes("limit")) {
+        if (onKeyExhausted) onKeyExhausted(apiKey);
         continue;
       } else {
         throw error;

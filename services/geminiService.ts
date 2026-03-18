@@ -49,7 +49,8 @@ export const sendMessageToGeminiStream = async (
   isPregnant: boolean,
   cdssAnalysis?: ScoredSyndrome[],
   apiKeys?: ApiKeyEntry[], // Use the new type
-  onChunk?: (text: string) => void
+  onChunk?: (text: string) => void,
+  onKeyExhausted?: (key: string) => void
 ) => {
   const availableKeys = (apiKeys || []).filter(k => !k.isExhausted && k.key.trim() !== "");
   
@@ -64,7 +65,6 @@ export const sendMessageToGeminiStream = async (
   if (availableKeys.length === 0) throw new Error("No active Gemini API keys found.");
 
   let lastError: any = null;
-  const exhaustedIndices: number[] = [];
 
   // Try up to 3 keys if they fail with 429
   const maxRetries = Math.min(availableKeys.length, 3);
@@ -102,16 +102,16 @@ export const sendMessageToGeminiStream = async (
       if (onChunk) onChunk(cleanText);
       
       return {
-        data: JSON.parse(cleanText),
-        exhaustedKeys: exhaustedIndices.map(idx => availableKeys[idx].key)
+        data: JSON.parse(cleanText)
       };
     } catch (error: any) {
       console.error(`Gemini Error with key ${apiKey.substring(0, 8)}...:`, error);
       lastError = error;
 
       // If 429 (Too Many Requests) or 403 (Forbidden/Quota), mark as exhausted
-      if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("403")) {
-        exhaustedIndices.push(i);
+      const errMsg = error.message?.toLowerCase() || "";
+      if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("403") || errMsg.includes("limit")) {
+        if (onKeyExhausted) onKeyExhausted(apiKey);
         continue; // Try next key
       } else {
         throw error; // Other errors (like 400) should stop immediately
