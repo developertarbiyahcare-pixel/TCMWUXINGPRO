@@ -209,8 +209,17 @@ const PatientFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, settings
     reader.onloadend = async () => {
       try {
         const base64 = reader.result as string;
-        const analysis = await analyzeTongueImage(base64, settings?.geminiApiKeys?.length ? settings.geminiApiKeys : settings?.geminiApiKey);
+        const result = await analyzeTongueImage(base64, settings?.geminiApiKeys);
+        const analysis = result.text;
         
+        // Update settings if keys were exhausted
+        if (result.exhaustedKeys.length > 0 && settings) {
+          const updatedKeys = settings.geminiApiKeys.map(k => 
+            result.exhaustedKeys.includes(k.key) ? { ...k, isExhausted: true } : k
+          );
+          await db.settings.update({ ...settings, geminiApiKeys: updatedKeys });
+        }
+
         // Parse the analysis text to fill the form
         // Simple parsing based on the prompt format
         const lines = analysis.split('\n');

@@ -207,15 +207,27 @@ const App: React.FC = () => {
     setMessages(prev => [...prev, { id: botMsgId, role: 'model', text: loadingText, timestamp: new Date() }]);
 
     try {
-      const response = await sendMessageToGeminiStream(
+      const result = await sendMessageToGeminiStream(
         textToSend, 
         fileToSend || undefined, 
         messages, 
         appLanguage, 
         false, 
         analysis || cdssResults,
-        settings?.geminiApiKeys?.length ? settings.geminiApiKeys : settings?.geminiApiKey
+        settings?.geminiApiKeys
       );
+      
+      const response = result.data;
+
+      // Update settings if keys were exhausted
+      if (result.exhaustedKeys.length > 0 && settings) {
+        const updatedKeys = settings.geminiApiKeys.map(k => 
+          result.exhaustedKeys.includes(k.key) ? { ...k, isExhausted: true } : k
+        );
+        const newSettings = { ...settings, geminiApiKeys: updatedKeys };
+        setSettings(newSettings);
+        db.settings.update(newSettings);
+      }
       
       setMessages(prev => prev.map(m => m.id === botMsgId ? { 
         ...m, 

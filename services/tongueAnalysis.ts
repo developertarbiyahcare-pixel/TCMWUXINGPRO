@@ -2,17 +2,21 @@
 // Fix: Update model to gemini-3-flash-preview for better image analysis and compliance with latest guidelines.
 
 import { GoogleGenAI } from "@google/genai";
+import { ApiKeyEntry } from '../types';
 
-export async function analyzeTongueImage(base64Image: string, apiKey?: string | string[]): Promise<string> {
-  const effectiveApiKey = Array.isArray(apiKey) 
-    ? apiKey[Math.floor(Math.random() * apiKey.length)] 
-    : (apiKey || process.env.GEMINI_API_KEY);
-
-  if (!effectiveApiKey) throw new Error("API Key not found.");
+export async function analyzeTongueImage(base64Image: string, apiKeys?: ApiKeyEntry[]): Promise<{ text: string, exhaustedKeys: string[] }> {
+  const availableKeys = (apiKeys || []).filter(k => !k.isExhausted && k.key.trim() !== "");
+  const exhaustedIndices: number[] = [];
   
-  const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
+  if (availableKeys.length === 0) {
+    const envKey = process.env.GEMINI_API_KEY;
+    if (envKey) {
+      availableKeys.push({ key: envKey, isExhausted: false });
+    }
+  }
 
-  // Extract mimeType and base64 data
+  if (availableKeys.length === 0) throw new Error("No active Gemini API keys found.");
+
   const [mimeTypePrefix, base64Data] = base64Image.split(';base64,');
   const mimeType = mimeTypePrefix ? mimeTypePrefix.split(':')[1] : "image/jpeg";
 
@@ -31,25 +35,43 @@ export async function analyzeTongueImage(base64Image: string, apiKey?: string | 
   Hanya jawab berdasarkan foto lidah ini, jangan tambah-tambah.
   `;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: {
-        parts: [
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Data
-            }
-          }
-        ]
-      }
-    });
+  let lastError: any = null;
+  const maxRetries = Math.min(availableKeys.length, 3);
 
-    return response.text || "Maaf, tidak dapat menganalisis gambar ini.";
-  } catch (error) {
-    console.error("Tongue Analysis Error:", error);
-    throw new Error("Gagal melakukan analisis lidah.");
+  for (let i = 0; i < maxRetries; i++) {
+    const apiKey = availableKeys[i].key;
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Data
+              }
+            }
+          ]
+        }
+      });
+
+      return {
+        text: response.text || "Maaf, tidak dapat menganalisis gambar ini.",
+        exhaustedKeys: exhaustedIndices.map(idx => availableKeys[idx].key)
+      };
+    } catch (error: any) {
+      console.error(`Tongue Analysis Error with key ${apiKey.substring(0, 8)}...:`, error);
+      lastError = error;
+      if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("403")) {
+        exhaustedIndices.push(i);
+        continue;
+      } else {
+        throw error;
+      }
+    }
   }
+
+  throw lastError || new Error("Gagal melakukan analisis lidah.");
 }

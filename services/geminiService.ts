@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Language, ScoredSyndrome } from '../types';
+import { Language, ScoredSyndrome, ApiKeyEntry } from '../types';
 
 const getSystemInstruction = (language: Language, cdssAnalysis?: ScoredSyndrome[]) => {
   const topSyndrome = cdssAnalysis && cdssAnalysis.length > 0 ? cdssAnalysis[0].syndrome : null;
@@ -48,46 +48,76 @@ export const sendMessageToGeminiStream = async (
   language: Language,
   isPregnant: boolean,
   cdssAnalysis?: ScoredSyndrome[],
-  apiKey?: string | string[],
+  apiKeys?: ApiKeyEntry[], // Use the new type
   onChunk?: (text: string) => void
 ) => {
-  try {
-    const effectiveApiKey = Array.isArray(apiKey) 
-      ? apiKey[Math.floor(Math.random() * apiKey.length)] 
-      : (apiKey || process.env.GEMINI_API_KEY);
+  const availableKeys = (apiKeys || []).filter(k => !k.isExhausted && k.key.trim() !== "");
+  
+  // Fallback to process.env if no keys provided
+  if (availableKeys.length === 0) {
+    const envKey = process.env.GEMINI_API_KEY;
+    if (envKey) {
+      availableKeys.push({ key: envKey, isExhausted: false });
+    }
+  }
+
+  if (availableKeys.length === 0) throw new Error("No active Gemini API keys found.");
+
+  let lastError: any = null;
+  const exhaustedIndices: number[] = [];
+
+  // Try up to 3 keys if they fail with 429
+  const maxRetries = Math.min(availableKeys.length, 3);
+
+  for (let i = 0; i < maxRetries; i++) {
+    const currentKeyEntry = availableKeys[i];
+    const apiKey = currentKeyEntry.key;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
       
-    if (!effectiveApiKey) throw new Error("API Key not found.");
-    
-    const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
-    
-    const parts: any[] = [{ text: message }];
-    if (image) {
-      const mimeType = image.split(';')[0].split(':')[1];
-      const base64Data = image.split(',')[1];
-      parts.push({
-        inlineData: {
-          mimeType,
-          data: base64Data
+      const parts: any[] = [{ text: message }];
+      if (image) {
+        const mimeType = image.split(';')[0].split(':')[1];
+        const base64Data = image.split(',')[1];
+        parts.push({
+          inlineData: {
+            mimeType,
+            data: base64Data
+          }
+        });
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [{ role: 'user', parts }],
+        config: {
+          systemInstruction: getSystemInstruction(language, cdssAnalysis),
+          responseMimeType: "application/json",
+          temperature: 0.1,
         }
       });
-    }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ role: 'user', parts }],
-      config: {
-        systemInstruction: getSystemInstruction(language, cdssAnalysis),
-        responseMimeType: "application/json",
-        temperature: 0.1,
-        thinkingConfig: { thinkingBudget: 0 }
+      const cleanText = response.text.trim();
+      if (onChunk) onChunk(cleanText);
+      
+      return {
+        data: JSON.parse(cleanText),
+        exhaustedKeys: exhaustedIndices.map(idx => availableKeys[idx].key)
+      };
+    } catch (error: any) {
+      console.error(`Gemini Error with key ${apiKey.substring(0, 8)}...:`, error);
+      lastError = error;
+
+      // If 429 (Too Many Requests) or 403 (Forbidden/Quota), mark as exhausted
+      if (error.message?.includes("429") || error.message?.includes("quota") || error.message?.includes("403")) {
+        exhaustedIndices.push(i);
+        continue; // Try next key
+      } else {
+        throw error; // Other errors (like 400) should stop immediately
       }
-    });
-
-    const cleanText = response.text.trim();
-    if (onChunk) onChunk(cleanText);
-    return JSON.parse(cleanText);
-  } catch (error) {
-    console.error("Gemini Critical Error:", error);
-    throw error;
+    }
   }
+
+  throw lastError || new Error("All attempted API keys failed.");
 };

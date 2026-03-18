@@ -36,9 +36,16 @@ export interface UserAccount {
   createdAt: number;
 }
 
+export interface ApiKeyEntry {
+  key: string;
+  isExhausted: boolean;
+  lastUsed?: number;
+  errorCount?: number;
+}
+
 export interface AppSettings {
   geminiApiKey: string;
-  geminiApiKeys?: string[];
+  geminiApiKeys: ApiKeyEntry[];
   clinicName: string;
   clinicAddress: string;
   clinicPhone: string;

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Trash2, Shield, User, AlertCircle, Save, Settings, Database, Key, MapPin, Phone, LogOut } from 'lucide-react';
-import { UserAccount, AppSettings } from '../types';
+import { X, UserPlus, Trash2, Shield, User, AlertCircle, Save, Settings, Database, Key, MapPin, Phone, LogOut, Zap } from 'lucide-react';
+import { UserAccount, AppSettings, ApiKeyEntry } from '../types';
 import { db } from '../services/db';
 import { getSupabase, isSupabaseConfigured } from '../supabase';
 
@@ -23,7 +23,7 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
 
   // Settings state
   const [geminiKey, setGeminiKey] = useState('');
-  const [geminiKeys, setGeminiKeys] = useState<string[]>([]);
+  const [geminiKeys, setGeminiKeys] = useState<ApiKeyEntry[]>([]);
   const [clinicName, setClinicName] = useState('');
   const [clinicAddress, setClinicAddress] = useState('');
   const [clinicPhone, setClinicPhone] = useState('');
@@ -125,19 +125,48 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
   const handleSaveSettings = async () => {
     setError('');
     setSuccessMsg('');
+    
+    // Clean up empty keys
+    const cleanedKeys = geminiKeys.filter(k => k.key.trim() !== "");
+
     const result = await db.settings.update({
       geminiApiKey: geminiKey,
-      geminiApiKeys: geminiKeys,
+      geminiApiKeys: cleanedKeys,
       clinicName,
       clinicAddress,
       clinicPhone
     });
     if (result) {
       setSuccessMsg("Settings saved successfully.");
-      window.location.reload(); // Reload to apply new API key and settings
+      setTimeout(() => window.location.reload(), 1000); // Reload to apply new API key and settings
     } else {
       setError("Failed to save settings.");
     }
+  };
+
+  const addKeyField = () => {
+    if (geminiKeys.length >= 10) {
+      setError("Maksimal 10 API Key.");
+      return;
+    }
+    setGeminiKeys([...geminiKeys, { key: '', isExhausted: false }]);
+  };
+
+  const removeKeyField = (index: number) => {
+    setGeminiKeys(geminiKeys.filter((_, i) => i !== index));
+  };
+
+  const updateKeyField = (index: number, value: string) => {
+    const newKeys = [...geminiKeys];
+    newKeys[index].key = value;
+    newKeys[index].isExhausted = false; // Reset status if key is edited
+    setGeminiKeys(newKeys);
+  };
+
+  const toggleKeyExhausted = (index: number) => {
+    const newKeys = [...geminiKeys];
+    newKeys[index].isExhausted = !newKeys[index].isExhausted;
+    setGeminiKeys(newKeys);
   };
 
   const handleChangeOwnPassword = async (e: React.FormEvent) => {
@@ -387,30 +416,68 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
              </>
            ) : activeTab === 'settings' ? (
              <div className="space-y-6">
-                <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 space-y-4">
+                 <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 space-y-4">
                   <h3 className="text-sm font-black text-tcm-primary uppercase tracking-wider flex items-center gap-2">
-                    <Key className="w-4 h-4" /> Gemini AI Configuration
+                    <Key className="w-4 h-4" /> Gemini AI Configuration (Multi-Key Rotation)
                   </h3>
-                  <div>
-                    <label className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 ml-1">Gemini API Key (Primary)</label>
-                    <input 
-                      type="password" 
-                      value={geminiKey}
-                      onChange={e => setGeminiKey(e.target.value)}
-                      className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-900 focus:border-tcm-primary outline-none shadow-sm transition-all font-mono"
-                      placeholder="Enter your Gemini API Key"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 ml-1">Multiple Gemini API Keys (Rotate)</label>
-                    <textarea 
-                      value={geminiKeys.join('\n')}
-                      onChange={e => setGeminiKeys(e.target.value.split('\n').map(k => k.trim()).filter(k => k))}
-                      rows={5}
-                      className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-900 focus:border-tcm-primary outline-none shadow-sm transition-all font-mono resize-none"
-                      placeholder="Enter multiple keys, one per line (up to 20)"
-                    />
-                    <p className="text-[10px] text-purple-400 mt-2 font-bold uppercase tracking-widest">Sistem akan merotasi kunci ini untuk menghindari limitasi kuota.</p>
+                  
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-xs font-bold text-purple-400 uppercase tracking-widest ml-1">Gemini API Keys (Max 10)</label>
+                      <button 
+                        onClick={addKeyField}
+                        className="text-[10px] font-black text-white bg-purple-600 px-3 py-1.5 rounded-lg uppercase tracking-widest hover:bg-purple-700 transition-all shadow-sm"
+                      >
+                        + Add Key
+                      </button>
+                    </div>
+                    
+                    {geminiKeys.length === 0 && (
+                      <div className="text-center py-8 bg-white/50 rounded-xl border border-dashed border-purple-200">
+                        <p className="text-xs font-bold text-purple-300 uppercase tracking-widest">No API Keys Added</p>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      {geminiKeys.map((keyEntry, idx) => (
+                        <div key={idx} className="flex gap-2 items-center animate-fade-in">
+                          <div className="flex-1 relative">
+                            <input 
+                              type="password" 
+                              value={keyEntry.key}
+                              onChange={e => updateKeyField(idx, e.target.value)}
+                              className={`w-full bg-white border ${keyEntry.isExhausted ? 'border-rose-200 bg-rose-50/30' : 'border-purple-200'} rounded-xl px-4 py-3 text-sm text-purple-900 focus:border-tcm-primary outline-none shadow-sm transition-all font-mono`}
+                              placeholder={`API Key #${idx + 1}`}
+                            />
+                            {keyEntry.isExhausted && (
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[8px] font-black text-rose-500 uppercase tracking-widest bg-rose-100 px-1.5 py-0.5 rounded">
+                                Exhausted
+                              </span>
+                            )}
+                          </div>
+                          <button 
+                            onClick={() => toggleKeyExhausted(idx)}
+                            className={`p-3 rounded-xl border transition-all ${keyEntry.isExhausted ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}
+                            title={keyEntry.isExhausted ? "Mark as Active" : "Mark as Exhausted"}
+                          >
+                            <Zap className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => removeKeyField(idx)}
+                            className="p-3 bg-white text-purple-300 border border-purple-100 rounded-xl hover:text-rose-500 hover:border-rose-100 transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="p-4 bg-white/50 rounded-xl border border-purple-100">
+                      <p className="text-[10px] text-purple-500 font-bold uppercase tracking-widest leading-relaxed">
+                        <Zap className="w-3 h-3 inline mr-1 text-amber-500" />
+                        Sistem akan merotasi kunci di atas secara otomatis. Jika satu kunci mencapai limit (Error 429/Quota), sistem akan beralih ke kunci berikutnya yang tersedia.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
