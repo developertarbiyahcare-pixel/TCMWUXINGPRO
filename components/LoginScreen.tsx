@@ -111,30 +111,22 @@ const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
         </form>
 
         <div className="pt-8 space-y-6">
-           <div className="relative">
-             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#F3E8FF]"></div></div>
-             <div className="relative flex justify-center text-[10px] uppercase font-black text-[#C4B5FD] tracking-[0.3em] bg-white px-4">Atau</div>
-           </div>
-
            <div className="space-y-3">
-             <button 
-               onClick={handleQuickAccess}
-               className="w-full flex items-center justify-center gap-3 py-5 bg-[#F5F3FF] text-[#7C3AED] font-black rounded-2xl hover:bg-[#EDE9FE] transition-all group uppercase tracking-widest text-sm"
-             >
-                <Zap className="w-5 h-5 group-hover:animate-pulse" /> Akses Cepat (Admin Lokal)
-             </button>
              <p className="text-[9px] text-center font-black text-[#A78BFA] uppercase tracking-widest">
-               Info: Gunakan <span className="text-[#7C3AED]">admin</span> & <span className="text-[#7C3AED]">admin123</span> untuk akses penuh.
+               Info: Gunakan akun klinik Anda untuk mengakses data pasien
+             </p>
+             <p className="text-[9px] text-center font-black text-[#A78BFA] uppercase tracking-widest">
+               dan fitur diagnosa profesional Enterprise.
              </p>
            </div>
            
-           <div className="text-center space-y-1">
-             <p className="text-[9px] text-[#A78BFA] uppercase font-black tracking-widest leading-relaxed">
-               Gunakan akun klinik Anda untuk mengakses data pasien
-             </p>
-             <p className="text-[9px] text-[#A78BFA] uppercase font-black tracking-widest leading-relaxed">
-               dan fitur diagnosa profesional Enterprise.
-             </p>
+           <div className="flex justify-center">
+             <button 
+               onClick={handleQuickAccess}
+               className="text-[10px] font-black text-[#7C3AED] uppercase tracking-widest hover:underline"
+             >
+               Quick Access (Demo Mode)
+             </button>
            </div>
         </div>
       </div>

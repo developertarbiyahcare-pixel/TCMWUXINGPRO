@@ -1,12 +1,30 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { UKOM_QUESTIONS } from '../services/ukomData';
-import { Search, GraduationCap, Eye, EyeOff, Filter, ChevronRight, BookOpen, AlertCircle } from 'lucide-react';
+import { Search, GraduationCap, Eye, EyeOff, Filter, ChevronRight, BookOpen, AlertCircle, Timer, Play, Pause, RotateCcw } from 'lucide-react';
 
 const UkomPracticePanel: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTheme, setSelectedTheme] = useState<string>('All');
   const [visibleAnswers, setVisibleAnswers] = useState<Record<number, boolean>>({});
+  const [timer, setTimer] = useState(0);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+
+  useEffect(() => {
+    let interval: any;
+    if (isTimerActive) {
+      interval = setInterval(() => {
+        setTimer(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerActive]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const themes = useMemo(() => {
     const set = new Set<string>();
@@ -62,6 +80,24 @@ const UkomPracticePanel: React.FC = () => {
              >
                 {themes.map(t => <option key={t} value={t}>{t}</option>)}
              </select>
+          </div>
+          <div className="flex items-center gap-2 bg-purple-100 px-4 py-2 rounded-xl border border-purple-200">
+             <Timer className={`w-4 h-4 ${isTimerActive ? 'text-rose-500 animate-pulse' : 'text-purple-400'}`} />
+             <span className="text-sm font-mono font-black text-purple-900 w-12">{formatTime(timer)}</span>
+             <div className="flex gap-1 border-l border-purple-200 ml-2 pl-2">
+                <button 
+                  onClick={() => setIsTimerActive(!isTimerActive)}
+                  className="p-1 hover:bg-purple-200 rounded transition-colors text-purple-600"
+                >
+                  {isTimerActive ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                </button>
+                <button 
+                  onClick={() => {setTimer(0); setIsTimerActive(false);}}
+                  className="p-1 hover:bg-purple-200 rounded transition-colors text-purple-400"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+             </div>
           </div>
         </div>
       </div>

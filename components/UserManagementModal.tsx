@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Trash2, Shield, User, AlertCircle, Save, Settings, Database, Key, MapPin, Phone } from 'lucide-react';
+import { X, UserPlus, Trash2, Shield, User, AlertCircle, Save, Settings, Database, Key, MapPin, Phone, LogOut } from 'lucide-react';
 import { UserAccount, AppSettings } from '../types';
 import { db } from '../services/db';
 import { getSupabase, isSupabaseConfigured } from '../supabase';
@@ -8,11 +8,12 @@ import { getSupabase, isSupabaseConfigured } from '../supabase';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  onLogout: () => void;
   currentUser: UserAccount;
 }
 
-const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) => {
-  const [activeTab, setActiveTab] = useState<'users' | 'settings'>('users');
+const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, currentUser }) => {
+  const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'profile'>('users');
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -22,9 +23,16 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) 
 
   // Settings state
   const [geminiKey, setGeminiKey] = useState('');
+  const [geminiKeys, setGeminiKeys] = useState<string[]>([]);
   const [clinicName, setClinicName] = useState('');
   const [clinicAddress, setClinicAddress] = useState('');
   const [clinicPhone, setClinicPhone] = useState('');
+
+  // Change Password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newOwnPassword, setNewOwnPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   useEffect(() => {
     let channel: any;
@@ -42,6 +50,7 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) 
           const s = await db.settings.get();
           if (s) {
             setGeminiKey(s.geminiApiKey || '');
+            setGeminiKeys(s.geminiApiKeys || []);
             setClinicName(s.clinicName || '');
             setClinicAddress(s.clinicAddress || '');
             setClinicPhone(s.clinicPhone || '');
@@ -118,6 +127,7 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) 
     setSuccessMsg('');
     const result = await db.settings.update({
       geminiApiKey: geminiKey,
+      geminiApiKeys: geminiKeys,
       clinicName,
       clinicAddress,
       clinicPhone
@@ -127,6 +137,62 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) 
       window.location.reload(); // Reload to apply new API key and settings
     } else {
       setError("Failed to save settings.");
+    }
+  };
+
+  const handleChangeOwnPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMsg('');
+
+    if (!newOwnPassword || !confirmNewPassword) {
+      setError('Password baru wajib diisi.');
+      return;
+    }
+
+    if (newOwnPassword !== confirmNewPassword) {
+      setError('Konfirmasi password tidak cocok.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const updatedUser = { ...currentUser, password: newOwnPassword };
+      const result = await db.users.add(updatedUser);
+      if (result) {
+        setSuccessMsg('Password berhasil diubah. Silakan login kembali.');
+        setTimeout(() => {
+          localStorage.removeItem('tcm_active_session');
+          window.location.reload();
+        }, 2000);
+      } else {
+        setError('Gagal mengubah password.');
+      }
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleDeleteOwnAccount = async () => {
+    if (currentUser.username === 'admin') {
+      setError("Akun admin utama tidak dapat dihapus.");
+      return;
+    }
+
+    if (!window.confirm("PERINGATAN: Menghapus akun akan menghapus semua akses Anda secara permanen. Lanjutkan?")) return;
+
+    const uid = (currentUser as any).uid;
+    if (!uid) {
+      setError("Gagal menemukan ID user.");
+      return;
+    }
+
+    const result = await db.users.delete(uid);
+    if (result) {
+      localStorage.removeItem('tcm_active_session');
+      window.location.reload();
+    } else {
+      setError("Gagal menghapus akun.");
     }
   };
 
@@ -199,6 +265,12 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) 
             className={`px-6 py-3 text-xs font-black uppercase tracking-widest transition-all border-b-4 ${activeTab === 'settings' ? 'border-tcm-primary text-tcm-primary' : 'border-transparent text-purple-400 hover:text-purple-600'}`}
           >
             System Settings
+          </button>
+          <button 
+            onClick={() => setActiveTab('profile')}
+            className={`px-6 py-3 text-xs font-black uppercase tracking-widest transition-all border-b-4 ${activeTab === 'profile' ? 'border-tcm-primary text-tcm-primary' : 'border-transparent text-purple-400 hover:text-purple-600'}`}
+          >
+            My Profile
           </button>
         </div>
 
@@ -313,14 +385,14 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) 
                   </div>
                </div>
              </>
-           ) : (
+           ) : activeTab === 'settings' ? (
              <div className="space-y-6">
                 <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 space-y-4">
                   <h3 className="text-sm font-black text-tcm-primary uppercase tracking-wider flex items-center gap-2">
                     <Key className="w-4 h-4" /> Gemini AI Configuration
                   </h3>
                   <div>
-                    <label className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 ml-1">Gemini API Key</label>
+                    <label className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 ml-1">Gemini API Key (Primary)</label>
                     <input 
                       type="password" 
                       value={geminiKey}
@@ -328,7 +400,17 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) 
                       className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-900 focus:border-tcm-primary outline-none shadow-sm transition-all font-mono"
                       placeholder="Enter your Gemini API Key"
                     />
-                    <p className="text-[10px] text-purple-400 mt-2 font-bold uppercase tracking-widest">Kunci ini digunakan untuk fitur Chat Diagnosa AI.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 ml-1">Multiple Gemini API Keys (Rotate)</label>
+                    <textarea 
+                      value={geminiKeys.join('\n')}
+                      onChange={e => setGeminiKeys(e.target.value.split('\n').map(k => k.trim()).filter(k => k))}
+                      rows={5}
+                      className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-900 focus:border-tcm-primary outline-none shadow-sm transition-all font-mono resize-none"
+                      placeholder="Enter multiple keys, one per line (up to 20)"
+                    />
+                    <p className="text-[10px] text-purple-400 mt-2 font-bold uppercase tracking-widest">Sistem akan merotasi kunci ini untuk menghindari limitasi kuota.</p>
                   </div>
                 </div>
 
@@ -383,7 +465,83 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, currentUser }) 
                   <Save className="w-5 h-5" /> Save All Settings
                 </button>
              </div>
-           )}
+           ) : activeTab === 'profile' ? (
+             <div className="space-y-6">
+                <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 space-y-4">
+                  <h3 className="text-sm font-black text-tcm-primary uppercase tracking-wider flex items-center gap-2">
+                    <User className="w-4 h-4" /> Account Info
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1">Username</p>
+                      <p className="text-sm font-bold text-purple-900">{currentUser.username}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1">Role</p>
+                      <p className="text-sm font-bold text-purple-900">{roleLabels[currentUser.role]}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={onLogout}
+                    className="w-full py-3 bg-purple-100 text-purple-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-purple-200 transition-all flex items-center justify-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" /> Logout dari Sesi
+                  </button>
+                </div>
+
+                <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100 space-y-4">
+                  <h3 className="text-sm font-black text-tcm-primary uppercase tracking-wider flex items-center gap-2">
+                    <Key className="w-4 h-4" /> Ganti Password
+                  </h3>
+                  <form onSubmit={handleChangeOwnPassword} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 ml-1">Password Baru</label>
+                      <input 
+                        type="password" 
+                        value={newOwnPassword}
+                        onChange={e => setNewOwnPassword(e.target.value)}
+                        className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-900 focus:border-tcm-primary outline-none shadow-sm transition-all"
+                        placeholder="Masukkan password baru"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-1 ml-1">Konfirmasi Password Baru</label>
+                      <input 
+                        type="password" 
+                        value={confirmNewPassword}
+                        onChange={e => setConfirmNewPassword(e.target.value)}
+                        className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-900 focus:border-tcm-primary outline-none shadow-sm transition-all"
+                        placeholder="Ulangi password baru"
+                        required
+                      />
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={isChangingPassword}
+                      className="w-full bg-tcm-primary hover:brightness-110 active:scale-95 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 text-sm shadow-xl shadow-purple-900/20 disabled:opacity-50"
+                    >
+                      {isChangingPassword ? 'Processing...' : 'Update Password'}
+                    </button>
+                  </form>
+                </div>
+
+                <div className="bg-rose-50 p-6 rounded-2xl border border-rose-100 space-y-4">
+                  <h3 className="text-sm font-black text-rose-600 uppercase tracking-wider flex items-center gap-2">
+                    <Trash2 className="w-4 h-4" /> Danger Zone
+                  </h3>
+                  <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest leading-relaxed">
+                    Menghapus akun akan menghapus semua akses Anda ke sistem ini. Tindakan ini tidak dapat dibatalkan.
+                  </p>
+                  <button 
+                    onClick={handleDeleteOwnAccount}
+                    className="w-full bg-white text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 text-sm shadow-sm"
+                  >
+                    <Trash2 className="w-5 h-5" /> Hapus Akun Saya Permanen
+                  </button>
+                </div>
+             </div>
+           ) : null}
         </div>
       </div>
     </div>

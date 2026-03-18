@@ -3,8 +3,14 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-export async function analyzeTongueImage(base64Image: string): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+export async function analyzeTongueImage(base64Image: string, apiKey?: string | string[]): Promise<string> {
+  const effectiveApiKey = Array.isArray(apiKey) 
+    ? apiKey[Math.floor(Math.random() * apiKey.length)] 
+    : (apiKey || process.env.GEMINI_API_KEY);
+
+  if (!effectiveApiKey) throw new Error("API Key not found.");
+  
+  const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
 
   // Extract mimeType and base64 data
   const [mimeTypePrefix, base64Data] = base64Image.split(';base64,');

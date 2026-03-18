@@ -4,7 +4,7 @@ import { TcmDiagnosisResult } from '../types';
 import { db } from '../services/db';
 import { 
   BrainCircuit, FileText, FileDown, ShieldCheck, MapPin, 
-  Heart, Leaf, Save, Check, Loader2, Anchor, Zap, Activity, Sparkles, Scale
+  Heart, Leaf, Save, Check, Loader2, Anchor, Zap, Activity, Sparkles, Scale, Copy, Share2
 } from 'lucide-react';
 import DoctorNoteModal from './DoctorNoteModal';
 import html2canvas from 'html2canvas';
@@ -94,6 +94,49 @@ const DiagnosisCard: React.FC<Props> = ({ diagnosis, isPregnant, onShowVisualize
     );
   };
 
+  const handleCopy = () => {
+    const text = `
+TCM DIAGNOSIS REPORT
+--------------------
+Pattern: ${diagnosis.patternId}
+Explanation: ${diagnosis.explanation}
+
+TREATMENT PRINCIPLE:
+${diagnosis.treatment_principle?.join(', ') || 'N/A'}
+
+PRESCRIPTION:
+${diagnosis.classical_prescription || 'N/A'}
+
+ACUPUNCTURE POINTS:
+${diagnosis.recommendedPoints?.map(p => `${p.code}: ${p.description}`).join('\n') || 'N/A'}
+
+MASTER TUNG POINTS:
+${diagnosis.masterTungPoints?.map(p => `${p.code}: ${p.description}`).join('\n') || 'N/A'}
+
+LIFESTYLE ADVICE:
+${diagnosis.lifestyleAdvice}
+    `.trim();
+    navigator.clipboard.writeText(text);
+    alert("Diagnosis copied to clipboard!");
+  };
+
+  const handleShare = async () => {
+    const text = `TCM Diagnosis: ${diagnosis.patternId}\nPrinciple: ${diagnosis.treatment_principle?.join(', ')}\nPrescription: ${diagnosis.classical_prescription}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'TCM Diagnosis Report',
+          text: text,
+          url: window.location.href
+        });
+      } catch (err) {
+        console.error("Share failed:", err);
+      }
+    } else {
+      handleCopy();
+    }
+  };
+
   return (
     <div className="mt-6 space-y-4 animate-fade-in print:text-black">
       <DoctorNoteModal 
@@ -119,6 +162,20 @@ const DiagnosisCard: React.FC<Props> = ({ diagnosis, isPregnant, onShowVisualize
               </div>
            </div>
            <div className="flex gap-2 print:hidden">
+              <button 
+                onClick={handleCopy}
+                title="Copy to Clipboard"
+                className="p-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-500 hover:text-tcm-primary hover:border-tcm-primary transition-all"
+              >
+                <Copy className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={handleShare}
+                title="Share Diagnosis"
+                className="p-3 rounded-xl border border-purple-200 bg-purple-50 text-purple-500 hover:text-tcm-primary hover:border-tcm-primary transition-all"
+              >
+                <Share2 className="w-5 h-5" />
+              </button>
               <button 
                 onClick={handleSave} 
                 title="Simpan ke Arsip Pasien"

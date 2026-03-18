@@ -48,11 +48,14 @@ export const sendMessageToGeminiStream = async (
   language: Language,
   isPregnant: boolean,
   cdssAnalysis?: ScoredSyndrome[],
-  apiKey?: string,
+  apiKey?: string | string[],
   onChunk?: (text: string) => void
 ) => {
   try {
-    const effectiveApiKey = apiKey || process.env.GEMINI_API_KEY;
+    const effectiveApiKey = Array.isArray(apiKey) 
+      ? apiKey[Math.floor(Math.random() * apiKey.length)] 
+      : (apiKey || process.env.GEMINI_API_KEY);
+      
     if (!effectiveApiKey) throw new Error("API Key not found.");
     
     const ai = new GoogleGenAI({ apiKey: effectiveApiKey });

@@ -1,8 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
-import { X, Save, Activity, ThermometerSnowflake, User, Stethoscope, Pill, Calendar, Search, UserCheck, ChevronRight, Tag, Info, AlertCircle, Clipboard, History, ShieldAlert, FileText, Phone, Mail } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Save, Activity, ThermometerSnowflake, User, Stethoscope, Pill, Calendar, Search, UserCheck, ChevronRight, Tag, Info, AlertCircle, Clipboard, History, ShieldAlert, FileText, Phone, Mail, Camera, Loader2, Sparkles } from 'lucide-react';
 import { db } from '../services/db';
-import { SavedPatient } from '../types';
+import { SavedPatient, AppSettings } from '../types';
+import { analyzeTongueImage } from '../services/tongueAnalysis';
 
 interface PatientData {
   patientName: string;
@@ -83,12 +84,15 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: PatientData) => void;
+  settings: AppSettings | null;
 }
 
-const PatientFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
+const PatientFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, settings }) => {
   const [storedPatients, setStoredPatients] = useState<SavedPatient[]>([]);
   const [showLookup, setShowLookup] = useState(false);
   const [lookupSearch, setLookupSearch] = useState('');
+  const [isAnalyzingTongue, setIsAnalyzingTongue] = useState(false);
+  const tongueInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState<PatientData>({
     patientName: '',
@@ -195,6 +199,56 @@ const PatientFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
     p.patientName.toLowerCase().includes(lookupSearch.toLowerCase()) ||
     (p.biomedicalDiagnosis && p.biomedicalDiagnosis.toLowerCase().includes(lookupSearch.toLowerCase()))
   ).slice(0, 5);
+
+  const handleTongueScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAnalyzingTongue(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const base64 = reader.result as string;
+        const analysis = await analyzeTongueImage(base64, settings?.geminiApiKeys?.length ? settings.geminiApiKeys : settings?.geminiApiKey);
+        
+        // Parse the analysis text to fill the form
+        // Simple parsing based on the prompt format
+        const lines = analysis.split('\n');
+        const updates: any = { ...formData.tongue };
+        
+        lines.forEach(line => {
+          if (line.toLowerCase().includes('warna badan lidah')) {
+            const val = line.split(':')[1]?.trim();
+            if (val) updates.body_color = TONGUE_BODY_COLORS.find(c => val.toLowerCase().includes(c.toLowerCase().split(' ')[0])) || updates.body_color;
+          }
+          if (line.toLowerCase().includes('warna lapisan')) {
+            const val = line.split(':')[1]?.trim();
+            if (val) updates.coating_color = TONGUE_COAT_COLORS.find(c => val.toLowerCase().includes(c.toLowerCase().split(' ')[0])) || updates.coating_color;
+          }
+          if (line.toLowerCase().includes('kualitas sabur')) {
+            const val = line.split(':')[1]?.trim();
+            if (val) updates.coating_quality = TONGUE_COAT_QUALITIES.find(c => val.toLowerCase().includes(c.toLowerCase().split(' ')[0])) || updates.coating_quality;
+          }
+          if (line.toLowerCase().includes('fitur khusus')) {
+            const val = line.split(':')[1]?.trim();
+            if (val) {
+              const foundFeatures = TONGUE_FEATURES.filter(f => val.toLowerCase().includes(f.toLowerCase().split(' ')[0]));
+              updates.special_features = [...new Set([...updates.special_features, ...foundFeatures])];
+            }
+          }
+        });
+
+        setFormData(prev => ({ ...prev, tongue: updates }));
+        alert("Analisis Lidah Berhasil! Form telah terisi otomatis.");
+      } catch (err) {
+        console.error(err);
+        alert("Gagal menganalisis lidah. Pastikan API Key sudah benar.");
+      } finally {
+        setIsAnalyzingTongue(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-purple-950/70 backdrop-blur-md p-4 animate-fade-in">
@@ -338,7 +392,30 @@ const PatientFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit }) => {
 
             {/* Tongue Diagnosis - Detailed */}
             <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-tcm-primary uppercase tracking-[0.3em] border-b border-purple-100 pb-2">II. Tongue Diagnosis Details</h3>
+              <div className="flex items-center justify-between border-b border-purple-100 pb-2">
+                <h3 className="text-[10px] font-black text-tcm-primary uppercase tracking-[0.3em]">II. Tongue Diagnosis Details</h3>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    ref={tongueInputRef}
+                    onChange={handleTongueScan}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => tongueInputRef.current?.click()}
+                    disabled={isAnalyzingTongue}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-tcm-primary/10 text-tcm-primary rounded-lg text-[9px] font-black hover:bg-tcm-primary/20 transition-all border border-tcm-primary/20 disabled:opacity-50"
+                  >
+                    {isAnalyzingTongue ? (
+                      <><Loader2 className="w-3 h-3 animate-spin" /> ANALYZING...</>
+                    ) : (
+                      <><Camera className="w-3 h-3" /> SCAN TONGUE AI</>
+                    )}
+                  </button>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <div>

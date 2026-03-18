@@ -1,6 +1,6 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Activity, MessageSquare, Stethoscope, Archive, Compass, GraduationCap, Shield, LogOut, ClipboardList, Loader2, Menu, X, Globe, User, LayoutGrid, Scale, Paperclip, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useRef, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import { Send, Activity, MessageSquare, Stethoscope, Archive, Compass, GraduationCap, Shield, LogOut, ClipboardList, Loader2, Menu, X, Globe, User, LayoutGrid, Scale, Paperclip, Image as ImageIcon, Zap, ChevronDown, ChevronRight } from 'lucide-react';
 import { Language, ChatMessage, ScoredSyndrome, UserAccount, TcmDiagnosisResult, AppSettings } from './types';
 import { sendMessageToGeminiStream } from './services/geminiService';
 import { analyzePatient } from './services/tcmLogic';
@@ -21,10 +21,77 @@ import AcupuncturePointsPanel from './components/AcupuncturePointsPanel';
 import InvoiceGeneratorPanel from './components/InvoiceGeneratorPanel';
 import BMIKomplitPanel from './components/BMIKomplitPanel';
 
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+  props: ErrorBoundaryProps;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-rose-50 flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl border border-rose-100 text-center">
+            <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Activity className="w-10 h-10 text-rose-600" />
+            </div>
+            <h1 className="text-2xl font-black text-rose-900 uppercase tracking-tight mb-4">System Error</h1>
+            <p className="text-sm text-rose-600 mb-8 font-medium">
+              Something went wrong in the TCM Engine. Please try refreshing the page.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-4 bg-rose-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200"
+            >
+              Refresh Application
+            </button>
+            {process.env.NODE_ENV === 'development' && (
+              <pre className="mt-8 p-4 bg-rose-50 rounded-xl text-[10px] text-rose-800 text-left overflow-auto max-h-40 font-mono">
+                {this.state.error?.toString()}
+              </pre>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+
+  // Persist user session to localStorage
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('tcm_active_session', JSON.stringify(currentUser));
+    } else if (isAuthReady) {
+      localStorage.removeItem('tcm_active_session');
+    }
+  }, [currentUser, isAuthReady]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -116,6 +183,7 @@ const App: React.FC = () => {
   const [lastPatientForm, setLastPatientForm] = useState<any>(null);
   const [selectedAtlasId, setSelectedAtlasId] = useState<string | undefined>(undefined);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [showAcupunctureRef, setShowAcupunctureRef] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -146,7 +214,7 @@ const App: React.FC = () => {
         appLanguage, 
         false, 
         analysis || cdssResults,
-        settings?.geminiApiKey
+        settings?.geminiApiKeys?.length ? settings.geminiApiKeys : settings?.geminiApiKey
       );
       
       setMessages(prev => prev.map(m => m.id === botMsgId ? { 
@@ -219,6 +287,15 @@ const App: React.FC = () => {
     setActivePanel('diagnosis');
   };
 
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('tcm_active_session');
+    if (isSupabaseConfigured()) {
+      getSupabase().auth.signOut();
+    }
+    window.location.reload();
+  };
+
   if (!isAuthReady) {
     return (
       <div className="min-h-screen bg-purple-50 flex items-center justify-center">
@@ -229,26 +306,32 @@ const App: React.FC = () => {
 
   if (!currentUser) return <LoginScreen onLoginSuccess={setCurrentUser} />;
 
-  const SidebarTab = ({ id, label, icon: Icon, activeClass }: { id: typeof activePanel, label: string, icon: any, activeClass: string }) => {
+  const SidebarTab = ({ id, label, icon: Icon }: { id: typeof activePanel, label: string, icon: any }) => {
     const isActive = activePanel === id;
     return (
       <button 
         onClick={() => {setActivePanel(id); setIsSidebarOpen(false);}} 
-        className={`w-full flex items-center gap-3 p-4 rounded-2xl text-sm font-black transition-all duration-200 border-l-4 ${
+        className={`w-full flex items-center gap-3 p-3.5 rounded-xl text-sm font-bold transition-all duration-200 ${
           isActive 
-          ? `${activeClass} border-purple-300 text-white shadow-md translate-x-1` 
-          : 'bg-transparent border-l-transparent text-purple-600 hover:bg-purple-50 hover:text-purple-900'
+          ? 'bg-purple-600 text-white shadow-lg shadow-purple-200' 
+          : 'bg-transparent text-purple-600 hover:bg-purple-50 hover:text-purple-900'
         }`}
       >
-        <Icon className={`w-5 h-5 transition-transform ${isActive ? 'scale-110 drop-shadow-sm' : ''}`} /> 
+        <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-purple-500'}`} /> 
         {label}
       </button>
     );
   };
 
   return (
-    <div className="flex h-[100dvh] bg-purple-50 text-purple-950 overflow-hidden font-sans">
-      <PatientFormModal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} onSubmit={handleFormSubmit} />
+    <ErrorBoundary>
+      <div className="flex h-[100dvh] bg-purple-50 text-purple-950 overflow-hidden font-sans">
+      <PatientFormModal 
+        isOpen={isFormOpen} 
+        onClose={() => setIsFormOpen(false)} 
+        onSubmit={handleFormSubmit} 
+        settings={settings}
+      />
       <WuXingVisualizerModal isOpen={isVisualizerOpen} onClose={() => setIsVisualizerOpen(false)} />
 
       {/* Sidebar */}
@@ -257,58 +340,78 @@ const App: React.FC = () => {
            <h1 className="text-2xl font-black text-tcm-primary flex items-center gap-2 tracking-tighter"><Activity className="w-8 h-8" /> TCM PRO</h1>
            <button onClick={() => setIsSidebarOpen(false)} className="md:hidden p-2 bg-purple-50 rounded-lg text-purple-400 hover:text-purple-950"><X className="w-5 h-5" /></button>
         </div>
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-hide">
-           <SidebarTab id="chat" label={appLanguage === Language.ENGLISH ? "Diagnostic Chat" : "Chat Diagnosa"} icon={MessageSquare} activeClass="bg-purple-600 shadow-purple-900/40" />
-           <SidebarTab id="diagnosis" label="CDSS Auto-Rx" icon={Stethoscope} activeClass="bg-fuchsia-600 shadow-fuchsia-900/40" />
-           <SidebarTab id="atlas" label="Atlas Sindrom" icon={LayoutGrid} activeClass="bg-violet-600 shadow-violet-900/40" />
-           <SidebarTab id="wuxing" label="Wu Xing Master" icon={Compass} activeClass="bg-pink-600 shadow-pink-900/40" />
-           <SidebarTab id="archive" label={appLanguage === Language.ENGLISH ? "Patient Archive" : "Arsip Pasien"} icon={Archive} activeClass="bg-purple-800 shadow-purple-950/40" />
-           <SidebarTab id="invoice" label="Invoice Generator" icon={ClipboardList} activeClass="bg-indigo-600 shadow-indigo-900/40" />
-           <SidebarTab id="bmi" label="BMI Komplit" icon={Scale} activeClass="bg-teal-600 shadow-teal-900/40" />
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto scrollbar-hide">
+           <SidebarTab id="chat" label={appLanguage === Language.ENGLISH ? "Diagnostic Chat" : "Chat Diagnosa"} icon={MessageSquare} />
+           <SidebarTab id="diagnosis" label="CDSS Auto-Rx" icon={Stethoscope} />
+           <SidebarTab id="atlas" label="Atlas Sindrom" icon={LayoutGrid} />
+           <SidebarTab id="wuxing" label="Wu Xing Master" icon={Compass} />
+           <SidebarTab id="acupuncture" label="Acupuncture Atlas" icon={Zap} />
+           <SidebarTab id="archive" label={appLanguage === Language.ENGLISH ? "Patient Archive" : "Arsip Pasien"} icon={Archive} />
+           <SidebarTab id="invoice" label="Invoice Generator" icon={ClipboardList} />
+           <SidebarTab id="bmi" label="BMI Komplit" icon={Scale} />
         </nav>
-        <div className="p-4 border-t border-purple-100 shrink-0 bg-white space-y-2">
+        <div className="p-4 border-t border-purple-100 shrink-0 bg-white space-y-3 mb-16 md:mb-0">
            {(currentUser.role === 'SUPER_SAINT' || currentUser.role === 'SUPER_USER' || currentUser.role === 'ADMIN') && (
              <button 
                onClick={() => setIsUserModalOpen(true)}
-               className="w-full py-3 bg-purple-50 text-purple-600 border border-purple-200 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-purple-100 transition-all flex items-center justify-center gap-2"
+               className="w-full py-3 bg-white text-purple-600 border border-purple-200 rounded-xl font-bold text-[11px] uppercase tracking-wider hover:bg-purple-50 transition-all flex items-center justify-center gap-2 shadow-sm"
              >
                <Shield className="w-4 h-4" /> Master Control
              </button>
            )}
-           <button onClick={() => setIsFormOpen(true)} className="w-full py-4 bg-gradient-to-br from-fuchsia-400 to-tcm-primary text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-purple-900/30 active:scale-95 flex items-center justify-center gap-2">
+           <button onClick={() => setIsFormOpen(true)} className="w-full py-3.5 bg-purple-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-purple-700 transition-all shadow-md shadow-purple-100 active:scale-95 flex items-center justify-center gap-2">
              <ClipboardList className="w-4 h-4" /> {appLanguage === Language.ENGLISH ? "New Patient Intake" : "Input Pasien Baru"}
+           </button>
+           <button 
+             onClick={handleLogout}
+             className="w-full py-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-xl font-bold text-[11px] uppercase tracking-wider hover:bg-rose-100 transition-all flex items-center justify-center gap-2"
+           >
+             <LogOut className="w-4 h-4" /> Logout
            </button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col h-full bg-purple-50 overflow-hidden">
+      <div className="flex-1 flex flex-col h-full bg-purple-50 overflow-hidden relative">
         {/* Top Header with Language Toggle */}
-        <header className="p-4 bg-white/50 border-b border-purple-100 flex justify-between items-center backdrop-blur-md">
+        <header className="p-4 bg-white/50 border-b border-purple-100 flex justify-between items-center backdrop-blur-md z-30">
            <div className="flex items-center gap-4">
              <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 bg-purple-100 rounded-lg text-purple-900"><Menu className="w-5 h-5" /></button>
-             <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-purple-100/50 rounded-full border border-purple-200">
+             <div className="flex items-center gap-2 px-3 py-1 bg-purple-100/50 rounded-full border border-purple-200">
                 <div className="w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse"></div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-purple-500">System Online</span>
+                <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-purple-500">
+                  {isSupabaseConfigured() ? "Cloud Sync" : "Local Mode"}
+                </span>
              </div>
            </div>
            
-           <div className="flex items-center gap-4">
+           <div className="flex items-center gap-2 md:gap-4">
+              <button 
+                onClick={() => window.location.reload()}
+                className="p-2 bg-white hover:bg-purple-50 rounded-xl border border-purple-200 transition-all active:scale-95 text-purple-600 shadow-sm"
+                title="Sync Data"
+              >
+                <Zap className="w-4 h-4" />
+              </button>
+              
               <button 
                 onClick={toggleLanguage}
-                className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-purple-50 rounded-xl border border-purple-200 transition-all active:scale-95 group shadow-sm"
+                className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white hover:bg-purple-50 rounded-xl border border-purple-200 transition-all active:scale-95 group shadow-sm"
               >
                 <Globe className="w-4 h-4 text-tcm-primary group-hover:rotate-12 transition-transform" />
-                <span className="text-xs font-black uppercase tracking-tighter text-purple-900">
+                <span className="text-[10px] md:text-xs font-black uppercase tracking-tighter text-purple-900">
                   {appLanguage === Language.ENGLISH ? "EN" : "ID"}
                 </span>
               </button>
-              <div className="w-9 h-9 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full border border-purple-300 flex items-center justify-center shadow-inner">
-                 <User className="w-5 h-5 text-purple-600" />
+              
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full border border-purple-300 flex items-center justify-center shadow-inner">
+                   <User className="w-5 h-5 text-purple-600" />
+                </div>
               </div>
            </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-hide bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,0.05),transparent)]">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-hide bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,0.05),transparent)] pb-20 md:pb-8">
           {activePanel === 'chat' && (
             <div className="max-w-4xl mx-auto space-y-6 pb-20">
               {messages.map(msg => (
@@ -365,14 +468,39 @@ const App: React.FC = () => {
             <SyndromeAtlasWindow onSelectSyndrome={handleAtlasSelect} />
           )}
           {activePanel === 'wuxing' && (
-            <div className="space-y-8">
+            <div className="space-y-8 max-w-6xl mx-auto">
               <WuXingMasterPanel />
-              <div className="border-t border-purple-100 pt-8">
-                <h2 className="text-lg font-black text-purple-900 uppercase tracking-tighter mb-6 flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-teal-500" /> Titik Akupuntur Terkait
-                </h2>
-                <AcupuncturePointsPanel />
+              
+              <div className="flex justify-center pt-4">
+                <button 
+                  onClick={() => {
+                    setActivePanel('acupuncture');
+                    setShowAcupunctureRef(true);
+                  }}
+                  className="w-full max-w-2xl py-6 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-purple-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4 group overflow-hidden relative"
+                >
+                  <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 skew-x-12"></div>
+                  <Zap className={`w-6 h-6 ${showAcupunctureRef ? 'animate-pulse text-amber-300' : ''}`} />
+                  Eksplorasi Atlas Titik (Tung & TCM)
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
+            </div>
+          )}
+          {activePanel === 'acupuncture' && (
+            <div className="max-w-6xl mx-auto animate-fade-in">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-black text-purple-900 uppercase tracking-tighter flex items-center gap-3">
+                  <div className="p-3 bg-teal-100 rounded-2xl">
+                    <Activity className="w-6 h-6 text-teal-600" />
+                  </div>
+                  Clinical Acupuncture Reference
+                </h2>
+                <div className="px-4 py-2 bg-purple-100 rounded-full text-[10px] font-black text-purple-600 uppercase tracking-widest border border-purple-200">
+                  Master Tung & TCM Clinical Points
+                </div>
+              </div>
+              <AcupuncturePointsPanel />
             </div>
           )}
           {activePanel === 'archive' && (
@@ -388,16 +516,49 @@ const App: React.FC = () => {
           {activePanel === 'bmi' && <BMIKomplitPanel />}
         </main>
 
+        {/* Mobile Bottom Navigation - Ergonomic for Android */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-purple-100 px-6 py-3 flex justify-between items-center z-40 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+          <button 
+            onClick={() => setActivePanel('chat')} 
+            className={`flex flex-col items-center gap-1 ${activePanel === 'chat' ? 'text-purple-600' : 'text-purple-300'}`}
+          >
+            <MessageSquare className="w-6 h-6" />
+            <span className="text-[10px] font-black uppercase tracking-tighter">Chat</span>
+          </button>
+          <button 
+            onClick={() => setActivePanel('diagnosis')} 
+            className={`flex flex-col items-center gap-1 ${activePanel === 'diagnosis' ? 'text-purple-600' : 'text-purple-300'}`}
+          >
+            <Stethoscope className="w-6 h-6" />
+            <span className="text-[10px] font-black uppercase tracking-tighter">CDSS</span>
+          </button>
+          <button 
+            onClick={() => setActivePanel('archive')} 
+            className={`flex flex-col items-center gap-1 ${activePanel === 'archive' ? 'text-purple-600' : 'text-purple-300'}`}
+          >
+            <Archive className="w-6 h-6" />
+            <span className="text-[10px] font-black uppercase tracking-tighter">Arsip</span>
+          </button>
+          <button 
+            onClick={() => setIsSidebarOpen(true)} 
+            className="flex flex-col items-center gap-1 text-purple-300"
+          >
+            <Menu className="w-6 h-6" />
+            <span className="text-[10px] font-black uppercase tracking-tighter">Menu</span>
+          </button>
+        </div>
+
         {isUserModalOpen && (
           <UserManagementModal 
             isOpen={isUserModalOpen} 
             onClose={() => setIsUserModalOpen(false)} 
+            onLogout={handleLogout}
             currentUser={currentUser} 
           />
         )}
 
         {activePanel === 'chat' && (
-          <div className="p-4 md:p-6 bg-white/80 backdrop-blur-xl border-t border-purple-100">
+          <div className="p-4 md:p-6 bg-white/80 backdrop-blur-xl border-t border-purple-100 mb-16 md:mb-0">
             <div className="max-w-4xl mx-auto flex flex-col gap-3">
               {selectedFile && (
                 <div className="relative flex items-center gap-3 p-3 bg-purple-50 rounded-xl border border-purple-200 shadow-sm w-fit pr-12">
@@ -455,6 +616,7 @@ const App: React.FC = () => {
         )}
       </div>
     </div>
+    </ErrorBoundary>
   );
 };
 

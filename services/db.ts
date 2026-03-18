@@ -3,6 +3,7 @@ import { UserAccount, SavedPatient, AppSettings } from '../types';
 import { getSupabase, isSupabaseConfigured } from '../supabase';
 
 export const DEFAULT_ADMIN: UserAccount = {
+  uid: 'admin-init',
   username: 'admin',
   password: 'admin123', 
   role: 'SUPER_SAINT',
@@ -43,7 +44,10 @@ export const db = {
         const supabase = getSupabase();
         const { data, error } = await supabase.from('users').select('*');
         if (error) throw error;
-        return data && data.length > 0 ? data : [DEFAULT_ADMIN];
+        // If Supabase has users, don't return the hardcoded DEFAULT_ADMIN
+        if (data && data.length > 0) return data;
+        // Only return DEFAULT_ADMIN if the database is empty
+        return [DEFAULT_ADMIN];
       } catch (e) {
         console.error('Supabase Error (users.getAll):', e);
         return [DEFAULT_ADMIN];

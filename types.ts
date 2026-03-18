@@ -38,6 +38,7 @@ export interface UserAccount {
 
 export interface AppSettings {
   geminiApiKey: string;
+  geminiApiKeys?: string[];
   clinicName: string;
   clinicAddress: string;
   clinicPhone: string;
