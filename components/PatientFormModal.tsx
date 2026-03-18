@@ -253,9 +253,10 @@ const PatientFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, settings
 
         setFormData(prev => ({ ...prev, tongue: updates }));
         alert("Analisis Lidah Berhasil! Form telah terisi otomatis.");
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        alert("Gagal menganalisis lidah. Pastikan API Key sudah benar.");
+        const errorMsg = err.message || "Gagal menganalisis lidah. Pastikan API Key sudah benar.";
+        alert(errorMsg);
       } finally {
         setIsAnalyzingTongue(false);
       }

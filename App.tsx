@@ -258,9 +258,15 @@ const App: React.FC = () => {
           icd10: patientData.icd10 || ''
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat Error:", error);
-      const errorMsg = appLanguage === Language.ENGLISH ? "Failed to process data. Please check your API connection." : "Gagal memproses data. Mohon periksa koneksi API Anda.";
+      let errorMsg = appLanguage === Language.ENGLISH ? "Failed to process data. Please check your API connection." : "Gagal memproses data. Mohon periksa koneksi API Anda.";
+      
+      // If the error message is informative, show it
+      if (error.message && !error.message.includes("429") && !error.message.includes("quota")) {
+        errorMsg = error.message;
+      }
+      
       setMessages(prev => prev.map(m => m.id === botMsgId ? { ...m, text: errorMsg, isError: true } : m));
     } finally {
       setIsLoading(false);

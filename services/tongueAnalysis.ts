@@ -57,6 +57,10 @@ export async function analyzeTongueImage(
               }
             }
           ]
+        },
+        config: {
+          maxOutputTokens: 1024,
+          temperature: 0.1,
         }
       });
 
