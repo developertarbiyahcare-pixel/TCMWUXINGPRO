@@ -183,8 +183,11 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
     
     // Also save to DB immediately for convenience
     const result = await db.settings.update({
-      ...settings,
-      geminiApiKeys: newKeys
+      geminiApiKey: geminiKey,
+      geminiApiKeys: newKeys,
+      clinicName,
+      clinicAddress,
+      clinicPhone
     });
     
     if (result.success) {

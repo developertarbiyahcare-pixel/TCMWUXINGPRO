@@ -84,6 +84,10 @@ const App: React.FC = () => {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
+  useEffect(() => {
+    console.log("APP: Current Settings State:", settings);
+  }, [settings]);
+
   const handleResetKeys = async () => {
     if (!settings) return;
     const newKeys = (settings.geminiApiKeys || []).map(k => ({ ...k, isExhausted: false }));
