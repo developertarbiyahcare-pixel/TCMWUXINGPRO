@@ -17,50 +17,90 @@ export const db = {
       const local = localStorage.getItem('tcm_app_settings');
       const localData = local ? JSON.parse(local) : null;
 
-      if (!isSupabaseConfigured()) return localData;
+      if (!isSupabaseConfigured()) {
+        if (localData && !localData.geminiApiKeys) {
+          localData.geminiApiKeys = [];
+        }
+        return localData;
+      }
 
       try {
         const supabase = getSupabase();
-        const { data, error } = await supabase.from('settings').select('*').single();
-        if (error) {
-          if (error.code === 'PGRST116') return localData; // No rows found
-          throw error;
-        }
+        const { data, error } = await supabase.from('settings').select('*').maybeSingle();
+        if (error) throw error;
+        
         // Sync local with remote
-        if (data) localStorage.setItem('tcm_app_settings', JSON.stringify(data));
-        return data;
+        if (data) {
+          // Ensure geminiApiKeys exists even if column is missing in DB (though upsert would fail)
+          const mergedData = {
+            ...data,
+            geminiApiKeys: data.geminiApiKeys || []
+          };
+          localStorage.setItem('tcm_app_settings', JSON.stringify(mergedData));
+          return mergedData;
+        }
+        
+        if (localData && !localData.geminiApiKeys) {
+          localData.geminiApiKeys = [];
+        }
+        return localData;
       } catch (e) {
         console.error('Supabase Error (settings.get):', e);
+        if (localData && !localData.geminiApiKeys) {
+          localData.geminiApiKeys = [];
+        }
         return localData;
       }
     },
     update: async (settings: AppSettings): Promise<{ success: boolean; error?: string }> => {
-      // Always save to local
-      localStorage.setItem('tcm_app_settings', JSON.stringify(settings));
-      
-      if (!isSupabaseConfigured()) return { success: true };
+      console.log('DB: Attempting settings update', settings);
       
       try {
+        // 1. Save to Local Storage first
+        const settingsString = JSON.stringify(settings);
+        localStorage.setItem('tcm_app_settings', settingsString);
+        
+        // Verify local save
+        const verified = localStorage.getItem('tcm_app_settings');
+        if (verified !== settingsString) {
+          console.error('DB: LocalStorage verification failed!');
+          return { success: false, error: "Local storage write failed. Your browser might be blocking storage." };
+        }
+        console.log('DB: LocalStorage save verified');
+
+        // 2. Try Supabase if configured
+        if (!isSupabaseConfigured()) {
+          console.log('DB: Supabase not configured, using LocalStorage only.');
+          return { success: true };
+        }
+
         const supabase = getSupabase();
-        // Ensure we only send valid columns to Supabase
-        // If the table is missing columns, this might still fail, but we catch it
-        const { error } = await supabase.from('settings').upsert({ 
+        const payload = { 
           id: 1, 
           geminiApiKey: settings.geminiApiKey,
           geminiApiKeys: settings.geminiApiKeys,
           clinicName: settings.clinicName,
           clinicAddress: settings.clinicAddress,
           clinicPhone: settings.clinicPhone
-        });
+        };
+
+        console.log('DB: Sending to Supabase', payload);
+        const { error } = await supabase.from('settings').upsert(payload);
         
-        if (error) throw error;
+        if (error) {
+          console.error('DB: Supabase Upsert Error', error);
+          // We return success: true because LocalStorage worked, but we warn about the DB
+          return { 
+            success: true, 
+            error: `Saved locally, but Cloud Sync failed: ${error.message}. Please check if the "settings" table has a "geminiApiKeys" column.` 
+          };
+        }
+
+        console.log('DB: Supabase sync successful');
         return { success: true };
       } catch (e: any) {
-        console.error('Supabase Error (settings.update):', e);
-        return { 
-          success: false, 
-          error: `Database Error: ${e.message || 'Unknown error'}. Please ensure your Supabase "settings" table has a "geminiApiKeys" column (JSONB).` 
-        };
+        console.error('DB: Critical error in settings.update', e);
+        return { success: false, error: e.message || "An unexpected error occurred while saving." };
       }
     }
   },

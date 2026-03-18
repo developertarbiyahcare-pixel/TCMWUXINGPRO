@@ -128,6 +128,7 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
     
     // Clean up empty keys
     const cleanedKeys = geminiKeys.filter(k => k.key.trim() !== "");
+    console.log('Saving settings with keys:', cleanedKeys);
 
     const result = await db.settings.update({
       geminiApiKey: geminiKey,
@@ -136,9 +137,16 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
       clinicAddress,
       clinicPhone
     });
+    console.log('Save settings result:', result);
     if (result.success) {
-      setSuccessMsg("Settings saved successfully.");
-      setTimeout(() => window.location.reload(), 1000); // Reload to apply new API key and settings
+      if (result.error) {
+        setSuccessMsg(`Settings saved locally! (Note: ${result.error})`);
+        // Longer timeout if there's a warning so they can read it
+        setTimeout(() => window.location.reload(), 3000);
+      } else {
+        setSuccessMsg("Settings saved successfully.");
+        setTimeout(() => window.location.reload(), 1000);
+      }
     } else {
       setError(result.error || "Failed to save settings.");
     }
