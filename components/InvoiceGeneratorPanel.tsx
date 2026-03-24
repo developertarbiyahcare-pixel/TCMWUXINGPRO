@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
-import { FileText, Download, Plus, Trash2, Printer, Calculator } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { FileText, Download, Plus, Trash2, Printer, Calculator, Building2, MapPin, Phone } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { AppSettings } from '../types';
 
 interface InvoiceItem {
   id: string;
@@ -10,11 +11,29 @@ interface InvoiceItem {
   unitPrice: number;
 }
 
-export const InvoiceGeneratorPanel: React.FC = () => {
+interface Props {
+  settings?: AppSettings | null;
+}
+
+export const InvoiceGeneratorPanel: React.FC<Props> = ({ settings }) => {
   const [invoiceNumber, setInvoiceNumber] = useState(`INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-001`);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [clientName, setClientName] = useState('');
   const [clientAddress, setClientAddress] = useState('');
+  
+  // Clinic Info (Editable)
+  const [clinicName, setClinicName] = useState(settings?.clinicName || 'TCM PRO');
+  const [clinicAddress, setClinicAddress] = useState(settings?.clinicAddress || 'Jl. Kesehatan No. 123, Jakarta');
+  const [clinicPhone, setClinicPhone] = useState(settings?.clinicPhone || '+62 812 3456 7890');
+
+  useEffect(() => {
+    if (settings) {
+      if (settings.clinicName) setClinicName(settings.clinicName);
+      if (settings.clinicAddress) setClinicAddress(settings.clinicAddress);
+      if (settings.clinicPhone) setClinicPhone(settings.clinicPhone);
+    }
+  }, [settings]);
+
   const [items, setItems] = useState<InvoiceItem[]>([
     { id: Date.now().toString(), description: 'TCM Consultation & Treatment', quantity: 1, unitPrice: 0 }
   ]);
@@ -74,6 +93,10 @@ export const InvoiceGeneratorPanel: React.FC = () => {
     let txtContent = `==================================================\n`;
     txtContent += `                    INVOICE\n`;
     txtContent += `==================================================\n\n`;
+    txtContent += `Clinic     : ${clinicName}\n`;
+    txtContent += `Address    : ${clinicAddress}\n`;
+    txtContent += `Phone      : ${clinicPhone}\n`;
+    txtContent += `\n--------------------------------------------------\n`;
     txtContent += `Invoice No : ${invoiceNumber}\n`;
     txtContent += `Date       : ${date}\n`;
     txtContent += `Client     : ${clientName}\n`;
@@ -123,6 +146,40 @@ export const InvoiceGeneratorPanel: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Clinic Information */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-black text-purple-800 uppercase tracking-widest border-b border-purple-100 pb-2 flex items-center gap-2">
+              <Building2 className="w-4 h-4" /> Clinic Information
+            </h3>
+            <div>
+              <label className="block text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Clinic Name</label>
+              <input 
+                type="text" 
+                value={clinicName} 
+                onChange={e => setClinicName(e.target.value)}
+                className="w-full bg-purple-50 border border-purple-200 rounded-xl px-3 py-2 text-sm text-purple-900 focus:border-purple-400 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Clinic Address</label>
+              <input 
+                type="text" 
+                value={clinicAddress} 
+                onChange={e => setClinicAddress(e.target.value)}
+                className="w-full bg-purple-50 border border-purple-200 rounded-xl px-3 py-2 text-sm text-purple-900 focus:border-purple-400 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Clinic Phone</label>
+              <input 
+                type="text" 
+                value={clinicPhone} 
+                onChange={e => setClinicPhone(e.target.value)}
+                className="w-full bg-purple-50 border border-purple-200 rounded-xl px-3 py-2 text-sm text-purple-900 focus:border-purple-400 outline-none"
+              />
+            </div>
+          </div>
+
           <div className="space-y-4">
             <h3 className="text-sm font-black text-purple-800 uppercase tracking-widest border-b border-purple-100 pb-2">Invoice Details</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -283,13 +340,13 @@ export const InvoiceGeneratorPanel: React.FC = () => {
             <div className="text-right">
               <div className="flex items-center justify-end gap-2 mb-2">
                 <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-black text-xl">T</span>
+                  <span className="text-white font-black text-xl">{clinicName.charAt(0)}</span>
                 </div>
-                <h2 className="text-xl font-black text-purple-900 tracking-tighter">TCM PRO</h2>
+                <h2 className="text-xl font-black text-purple-900 tracking-tighter">{clinicName}</h2>
               </div>
               <p className="text-xs text-purple-500">Traditional Chinese Medicine Clinic</p>
-              <p className="text-xs text-purple-500">Jl. Kesehatan No. 123, Jakarta</p>
-              <p className="text-xs text-purple-500">Tel: +62 812 3456 7890</p>
+              <p className="text-xs text-purple-500">{clinicAddress}</p>
+              <p className="text-xs text-purple-500">Tel: {clinicPhone}</p>
             </div>
           </div>
 
@@ -345,7 +402,7 @@ export const InvoiceGeneratorPanel: React.FC = () => {
           )}
           
           <div className="mt-16 text-center text-[10px] text-purple-400 font-bold uppercase tracking-widest">
-            Generated by TCM PRO System
+            Generated by {clinicName} System
           </div>
         </div>
       </div>

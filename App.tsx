@@ -138,10 +138,11 @@ const App: React.FC = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setCurrentUser({
+            uid: session.user.id,
             username: session.user.user_metadata.full_name || session.user.email || 'User',
             password: '',
-            role: 'user',
-            createdAt: Date.now()
+            role: (session.user.user_metadata.role as any) || 'REGULAR',
+            createdAt: new Date(session.user.created_at).getTime()
           });
         } else {
           const saved = localStorage.getItem('tcm_active_session');
@@ -168,10 +169,11 @@ const App: React.FC = () => {
         const { data } = supabase.auth.onAuthStateChange((_event, session) => {
           if (session?.user) {
             setCurrentUser({
+              uid: session.user.id,
               username: session.user.user_metadata.full_name || session.user.email || 'User',
               password: '',
-              role: 'user',
-              createdAt: Date.now()
+              role: (session.user.user_metadata.role as any) || 'REGULAR',
+              createdAt: new Date(session.user.created_at).getTime()
             });
           } else {
             const saved = localStorage.getItem('tcm_active_session');
@@ -589,7 +591,7 @@ const App: React.FC = () => {
               }} 
             />
           )}
-          {activePanel === 'invoice' && <InvoiceGeneratorPanel />}
+          {activePanel === 'invoice' && <InvoiceGeneratorPanel settings={settings} />}
           {activePanel === 'bmi' && <BMIKomplitPanel />}
         </main>
 

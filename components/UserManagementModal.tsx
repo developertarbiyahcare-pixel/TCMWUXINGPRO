@@ -215,17 +215,27 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
 
     setIsChangingPassword(true);
     try {
-      const updatedUser = { ...currentUser, password: newOwnPassword };
-      const result = await db.users.add(updatedUser);
-      if (result) {
-        setSuccessMsg('Password berhasil diubah. Silakan login kembali.');
-        setTimeout(() => {
-          localStorage.removeItem('tcm_active_session');
-          window.location.reload();
-        }, 2000);
+      if (isSupabaseConfigured()) {
+        const supabase = getSupabase();
+        const { error: authError } = await supabase.auth.updateUser({ password: newOwnPassword });
+        if (authError) throw authError;
+        
+        // Also update our custom table if needed
+        await db.users.add({ ...currentUser, password: '' }); 
       } else {
-        setError('Gagal mengubah password.');
+        const updatedUser = { ...currentUser, password: newOwnPassword };
+        const result = await db.users.add(updatedUser);
+        if (!result) throw new Error("Gagal mengubah password.");
       }
+
+      setSuccessMsg('Password berhasil diubah. Silakan login kembali.');
+      setTimeout(() => {
+        localStorage.removeItem('tcm_active_session');
+        if (isSupabaseConfigured()) getSupabase().auth.signOut();
+        window.location.reload();
+      }, 2000);
+    } catch (e: any) {
+      setError(e.message || 'Gagal mengubah password.');
     } finally {
       setIsChangingPassword(false);
     }
@@ -239,18 +249,27 @@ const UserManagementModal: React.FC<Props> = ({ isOpen, onClose, onLogout, curre
 
     if (!window.confirm("PERINGATAN: Menghapus akun akan menghapus semua akses Anda secara permanen. Lanjutkan?")) return;
 
-    const uid = (currentUser as any).uid;
+    const uid = currentUser.uid;
     if (!uid) {
       setError("Gagal menemukan ID user.");
       return;
     }
 
-    const result = await db.users.delete(uid);
-    if (result) {
-      localStorage.removeItem('tcm_active_session');
-      window.location.reload();
-    } else {
-      setError("Gagal menghapus akun.");
+    try {
+      const result = await db.users.delete(uid);
+      if (result) {
+        localStorage.removeItem('tcm_active_session');
+        if (isSupabaseConfigured()) {
+          // Note: Supabase doesn't allow users to delete themselves easily without a function 
+          // but we can at least sign them out and remove from our table.
+          await getSupabase().auth.signOut();
+        }
+        window.location.reload();
+      } else {
+        setError("Gagal menghapus akun.");
+      }
+    } catch (e: any) {
+      setError(e.message || "Gagal menghapus akun.");
     }
   };
 

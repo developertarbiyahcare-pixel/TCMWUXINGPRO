@@ -1,18 +1,18 @@
 
 import React, { useState } from 'react';
-import { Lock, User, LogIn, Database, Zap, Chrome } from 'lucide-react';
-import { login } from '../services/authService';
+import { Lock, User, LogIn, Database, Zap, Chrome, Mail, UserPlus } from 'lucide-react';
+import { login, register } from '../services/authService';
 import { UserAccount } from '../types';
-import { db, DEFAULT_ADMIN } from '../services/db';
-import { getSupabase, isSupabaseConfigured } from '../supabase';
+import { DEFAULT_ADMIN } from '../services/db';
 
 interface Props {
   onLoginSuccess: (user: UserAccount) => void;
 }
 
 const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -27,21 +27,21 @@ const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
 
     try {
       if (activeTab === 'login') {
-        const user = await login(username, password);
+        const user = await login(email, password);
         if (user) onLoginSuccess(user);
-        else setError('Username atau password salah.');
+        else setError('Email atau password salah.');
       } else {
-        if (!username.trim() || !password.trim()) {
-          setError('Username dan password wajib diisi.');
+        if (!email.trim() || !password.trim() || !fullName.trim()) {
+          setError('Semua field wajib diisi.');
           return;
         }
-        const ok = await db.users.register({ username, password });
-        if (ok) {
-          setSuccess('Registrasi berhasil! Silakan login.');
+        const result = await register(email, password, fullName);
+        if (result.success) {
+          setSuccess(result.message);
           setActiveTab('login');
           setPassword('');
         } else {
-          setError('Username sudah digunakan atau terjadi kesalahan.');
+          setError(result.message);
         }
       }
     } finally {
@@ -80,12 +80,23 @@ const LoginScreen: React.FC<Props> = ({ onLoginSuccess }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {activeTab === 'register' && (
+            <div className="relative">
+              <UserPlus className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[#C4B5FD]" />
+              <input 
+                type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
+                className="w-full bg-white border border-[#EDE9FE] rounded-2xl py-5 pl-14 pr-5 text-[#4C1D95] placeholder-[#C4B5FD] focus:border-[#7C3AED] outline-none transition-all shadow-sm"
+                placeholder="Nama Lengkap / Klinik"
+                required
+              />
+            </div>
+          )}
           <div className="relative">
-            <User className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[#C4B5FD]" />
+            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[#C4B5FD]" />
             <input 
-              type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+              type="email" value={email} onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-white border border-[#EDE9FE] rounded-2xl py-5 pl-14 pr-5 text-[#4C1D95] placeholder-[#C4B5FD] focus:border-[#7C3AED] outline-none transition-all shadow-sm"
-              placeholder="Username Klinik"
+              placeholder="Email Klinik"
               required
             />
           </div>
